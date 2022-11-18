@@ -1,0 +1,205 @@
+---
+title: "Data Assignment 2"
+author: "Xianchi Zhang"
+date: '2022-10-04'
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+---
+Question1
+
+```{r, echo=FALSE, message=FALSE, }
+library(stargazer)
+tinytex::install_tinytex()
+data1 <- read.csv('OldFaithful.csv')
+data_model <- lm(Interval~Duration, data = data1)
+stargazer(coef(summary(data_model)), title= "Regression Results for Inteval and Duration", 
+        type = 'text',ci = TRUE)
+CI<-confint(data_model, level = 0.95)
+stargazer(CI, title = "Confidence Intervals for Data_model", type = "text")
+```
+
+1a. From the results above, the regression model shows that Interval = 10.74*Duration + 33.83, every 1-minute duration increase, the interval time before the next eruption will increase 10.74. For example, if the duration is 5 min, then the interval between next one would be 87.53 mins. p-value: the p-value for the duration is less than 0.05, so we conclude that it's significant and can reject the null hypothesis (H0=0) R^2 value: the regression model explains that 73.7% of the variance of Interval is explained by Duration in the regression model. The model fit the data set nicely.
+
+1b. Interpret the confidence level: On average, with one minute increase in the duration, the interval will increase by 9.513-11.969 according to the 95% confidence level.
+
+1c. 1. From the first plot "Residuals vs Fitted", I think it's not very linear well because the points in the plot are not randomly scattered so it doesn't show very great linearity; 2. From the second plot"Normal Q-Q", most of the points fall close to the line, so the normality assumption seem valid for the data set; 3. From the third plot, the spread for the third graph are not the same and LOESS curve doesn't show flat line. From the beginning to the middle of graph, the vertical range of the residuals increase with the increasing of fitted values, but indicates decreasing trend after that, so it doesnt' meet the "constant variance assumption". 4. The last plot is for the independence of errors. Because there is no showing points outside the cook's distance, so there is no influential point. 
+
+```{r, echo=FALSE, message=FALSE}
+# stargazer(data1, title = "Summary of the Old Faithful Data", digits = 2, type = "text")
+```
+
+```{r, echo=FALSE, message=FALSE}
+par(mfrow=c(2,2))
+plot(data_model)
+```
+
+```{r, echo=FALSE, message=FALSE}
+data1$Date_fac <- factor(data1$Date)
+data_model1 <- lm(Interval~Duration + Date_fac, data = data1)  
+stargazer(coef(summary(data_model1)), title= "Regression Results", 
+          type = 'text',ci = TRUE,digits = 2,font.size = "tiny",
+          column.sep.width = "1pt")
+```
+
+```{r, echo=FALSE, message=FALSE}
+# update_model <- lm(Interval~relevel(Date_fac, ref = "8") + Duration, data = data1)
+# summary(update_model)
+# stargazer(update_model, title = "Regression Model for Interval ~ Duration, 
+# Date (reference as day 8", type = "text")
+```
+
+1d. If we add the date as second predictor with the interval, these factor variables don't show significance (p-values are larger than 0.05) to the regression model and we cannot reject the null hypothesis(H0=0). I changed all reference not just day 1, and I found all days are not significant for the interval. I just attached reference as day8 as one of the examples in appendix. 
+
+1e. Compared with the two models, the data_model2 which add the Date predictor has the higher predictive accuracy based on the average RMSE values.
+```{r, echo=FALSE, message=FALSE}
+library(caret)
+ctr1 <- trainControl(method = "cv", number = 10)
+data_model2<- train(Interval ~ Duration, data = data1, method = "lm", trControl = ctr1)
+# print(data_model2)
+```
+```{r, echo=FALSE, message=FALSE}
+data_model3<- train(Interval ~ Duration+Date_fac, data = data1, method = "lm", trControl = ctr1)
+# print(data_model3)
+```
+
+
+Question 2
+```{r, echo=FALSE, message=FALSE}
+library(leaps)
+smoke<- read.csv('smoking.csv') 
+fit.full <- regsubsets(bwt.oz ~ ., smoke)
+# summary(fit.full)
+```
+
+```{r, echo=FALSE, message=FALSE}
+fit.summary <- summary(fit.full)
+# names(fit.summary)
+# fit.summary$rsq
+```
+
+```{r, echo=FALSE, message=FALSE}
+# par(mfrow=c(2,2))
+# plot(fit.summary$rss, xlab = "Number of Variables", ylab = "RSS", type = "l")
+# which.min(fit.summary$rss)
+# plot(fit.summary$adjr2, xlab = "Number of Variables", ylab = "Adjusted RSq", type = "l")  
+# which.max(fit.summary$adjr2) 
+# plot(fit.summary$cp, xlab = "Number of Variables", ylab = "Cp", type = "l")
+# which.min(fit.summary$cp)
+# plot(fit.summary$bic, xlab = "Number of Variables", ylab = "BIC", type = "l")
+# which.min(fit.summary$bic)   
+# points(8, fit.summary$adjr2[8], col = "red", cex =2, pch = 20)
+par(mfrow=c(2,2))
+plot(fit.full, scale = "r2") 
+plot(fit.full, scale = "adjr2")
+plot(fit.full, scale = "Cp")
+plot(fit.full, scale = "bic")
+```
+
+```{r, echo=FALSE, message=FALSE}
+# coef(fit.full, 5)
+```
+
+```{r, echo=FALSE, message=FALSE}
+# par(mfrow=c(2,2))
+# fit.fwd<-regsubsets(bwt.oz~ ., data = smoke,nvmax=10, method = "forward")
+# summary(fit.fwd)
+# coef(fit.fwd, 8)
+# plot(fit.fwd, scale = "bic")
+fit.bwd<-regsubsets(bwt.oz~ ., data = smoke,nvmax=10, method = "backward")
+# summary(fit.bwd)
+coef(fit.bwd, 8)
+# plot(fit.bwd, scale = "bic")
+# summary(fit.bwd)
+```
+
+```{r, echo=FALSE, message=FALSE}
+# par(mfrow=c(2,2))
+# fit.fwd<-regsubsets(bwt.oz~ ., data = smoke,nvmax=8, method = "forward")
+# fwd1<-summary(fit.fwd)
+# plot(fit.fwd, scale = "bic")
+# fit.bwd<-regsubsets(bwt.oz~ ., data = smoke,nvmax=8, method = "backward")
+# bwd1<-summary(fit.bwd)
+# plot(fit.bwd, scale = "bic")
+# summary(fit.bwd)
+```
+
+```{r, echo=FALSE, message=FALSE}
+# set.seed(1)
+# train<-sample(c(TRUE, FALSE), nrow(smoke), replace = TRUE)
+# test<-(!train)
+# fit.best <- regsubsets(bwt.oz~ .,data = smoke[train, ], nvmax = 10)
+# test.mat <- model.matrix(bwt.oz~ ., data = smoke[test,])
+# val.errors <- rep(NA,10)
+# for (i in 1:10){
+# coefi <- coef(fit.best, id = 1)
+# pred <- test.mat[, names(coefi)] %*% coefi
+# val.errors[i] <- mean((smoke$bwt.oz[test] - pred)^2)
+# }
+# val.errors
+# which.min((val.errors))
+```
+
+```{r, echo=FALSE, message=FALSE}
+# str(smoke)
+# sum(is.na(smoke$bwt.oz))
+smoke$med_fac<-factor(smoke$med)
+smoke$smoke_fac <- factor(smoke$smoke)
+smoke$inc_fac <- factor(smoke$inc)
+stargazer(smoke, title = "Summary of Smoke Data", digits = 2, type = "text")
+```
+
+```{r, echo=FALSE, message=FALSE}
+library(tidyverse)
+ggplot(smoke, aes(x = smoke_fac, fill = smoke_fac)) +  
+        geom_bar(aes(y = (..count..)/sum(..count..)))+xlab("Mothers who smoke or not") + 
+  ylab("Percentages")+ggtitle("% of mother's smoking status")
+```
+
+0 means mothers who don't smoke, 1 means mothers who smoke. 
+
+```{r, echo=FALSE, message=FALSE}
+smoke$mrace_fac<-factor(smoke$mrace, 
+levels = c("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "99"),
+labels = c("white", "white", "white", "white", "white", "white", "mexican", "black", "asian", "mix",
+           "unknown"))
+ggplot(smoke, aes(x = mrace_fac, fill = mrace_fac)) +  
+geom_bar(aes(y = (..count..)/sum(..count..)))+xlab("The race") + ylab("Percentages") + 
+  ggtitle("% of mother's race distribution")
+```
+
+```{r, echo=FALSE, message=FALSE}
+# model1 <- lm(bwt.oz~smoke_fac + parity+ mrace_fac+mht+mpregwt, data = smoke)
+# summary(model1)
+```
+
+```{r, echo=FALSE, message=FALSE}
+final_model <- lm(bwt.oz~smoke_fac + parity+ mrace_fac+mht+mpregwt+mrace_fac*smoke_fac, data = smoke)
+stargazer(coef(summary(final_model)), title= "Regression Results", type = 'text',ci = TRUE, digits = 2)
+```
+
+```{r, echo=FALSE, message=FALSE}
+CI<-confint(final_model, level = 0.95)
+stargazer(CI, title = "Confidence Intervals for Final_model1", type = "text", digits = 2)
+```
+Summary: For this report, I mainly find the best model selection to test if birth weight and mothers who smoke or not have significant relationship? Also, I use the model to consider other different factors. After the forward and backward model selection and compared with 4 different values: RSS, adjusted R^2, Cp and bic,the plot shows that the #5 and #8 would be the best models. Since I need to consider the data assignment instruction that we need to exclude the gestational age, because it's regarded as the outcome variable too. Also, the # 8 model suggests to add ID and date as the predictors, but we still can ignore these two. So, for the only difference of mpregwt, I just test if I need to add it in the final model. After I did that, I found the model with mpregwt will have lower RSE which mean the model will be the better. Also, the mpregwt has near 0 p-value in this model so it shows significance to the birth weight, so finally I decided to add this variable in my model. 
+
+Introduction: For this experiment, I need to find the relationship between the birth weight and mothers who smoke or not. Also, does any other factors still impact the birth weight with smoke factor? So for this report, first I choose the best subset selection and test if the data have any missing values. Then I use the forward and backward selection to see which variables mix are the best models through rss, adjusted R square, cp and bic. Finally, I build the model and analyze the summary table including the p-values, t-statistics, F-statistics and RMSE. Also, I created the confidence level to analyze the range of differences between the factor variables. 
+
+Data & Model: The final model can be expressed as: bwt.oz = B0 -B1smoke+B2parity+B3mht+B4mpregwt
++B5mrace+B6mrace*smoke. 
+For #1 question, while holding other predictors equal, the intercept in this model can be interpreted as the average birth weight for the mothers who don't smoke. The coefficient of smoke_fac1 can be interpreted as the difference in the average birth weight from the mothers who smoke vs mothers who don't smoke. The two coefficients show the p-value lower than 0.05 and significance with the birth weight, so we conclude that there are close linear regression relationship with birth weight. So mothers who smoke tend to give birth to babies with average around 9.65oz lower than the mothers who do not smoke. 
+
+For #2 question, based on the confidence interval table for final_model1 above, according to the 95% confidence interval, the possible range for the difference in birth weights between smokers and non-smokers are 7.017-12.275 oz on average. 
+
+For #3 question, from the model in appendix, it shows that some race have significant association between birth weights without combining the smoke factor. For the Black race people who smoke, the coefficient values shows that it has average birth weight on 8.83oz lower than those who do not smoke. The p-value is far less than 0.05 to show the significance and we can reject H0. From the 95% confidence level table above, the possible difference would be 5.71-13.66.For the Asian race people who smoke, the coefficient values shows that it has average birth weight on 7.94oz lower than those who do not smoke.From the 95% confidence level table above, the possible difference would be 1.982-13.896. The p-value is less than 0.05 to show the significance and we can reject H0.But for the race of mexican and mix, the p-values both larger than 0.05 so we can't conclude it has assocation with other two predictors and also we can't reject H0. However, if we consider the race factor interact with the smoke factor who shows 1, all the interaction effects have the p-value larger than 0.05 and shows less significance with the birth weight. So, it doesn't show evidence that the association with smoking and birth weight differ by mother's race while holding others equal. 
+
+For #4 question, parity, mht and mpregwt also show the strong association with birth weight and all p-values are less than 0.05. In terms of the parity, for every 1 number increase, the average birth weight will increase 0.65. For every 1 inch increase in the mht, the average birth weight will increase 0.9862. For every 1 pound increase in mpregwt(mother's pre-pregnancy weight ), the average birth weight will increase 0.11. 
+
+Conclusion: birth weight has significance relationship with the mothers who smoke and with other factors such as the number of previous pregnancies, race, mothers'heights and pre-pregnancy weight. However, we cannot make causal inference conclusion from the regression model because there was no random assignment to smoke factor. 
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
+
