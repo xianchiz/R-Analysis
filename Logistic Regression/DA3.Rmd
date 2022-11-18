@@ -1,0 +1,233 @@
+---
+title: "DA3"
+author: "Xianchi Zhang"
+date: '2022-10-29'
+output: pdf_document
+---
+```{r, echo=FALSE, message=FALSE, }
+# setwd("~/Documents/Duke MIDS/First semester/ids 702")
+nba <- read.csv("nba_games_stats.csv")
+# Set factor variables
+nba$Home <- factor(nba$Home)
+nba$Team <- factor(nba$Team)
+nba$WINorLOSS <- factor(nba$WINorLOSS)
+
+# Convert date to the right format
+nba$Date <- as.Date(nba$Date, "%Y-%m-%d")
+
+# Also create a binary variable from WINorLOSS.
+# This is not always necessary but can be useful
+#particularly for R functions that prefer numeric binary variables
+#to the original factor variables
+nba$Win <- rep(0,nrow(nba))
+nba$Win[nba$WINorLOSS=="W"] <- 1
+
+# Charlotte hornets subset
+nba_reduced <- nba[nba$Team == "CHO", ]
+
+# Set aside the 2017/2018 season as your test data
+nba_reduced_train <- nba_reduced[nba_reduced$Date < "2017-10-01",]
+nba_reduced_test <- nba_reduced[nba_reduced$Date >= "2017-10-01",]
+```
+Question 1
+```{r, echo=FALSE, message=FALSE, }
+# Question1 #
+# Create boxplots for the numeric variables
+library(stargazer)
+library(caret)
+library(arm)
+library(pROC)
+library(e1071)
+library(DAAG)
+# sum(is.na(nba_reduced_train))
+nba_reduced_train$Win <- factor(nba_reduced_train$Win)
+nba_reduced_train$Home <- factor(nba_reduced_train$Home)
+par(mfrow=c(3,3))
+boxplot(TeamPoints ~ Win, data = nba_reduced_train, main = "Teampoints vs win", 
+        col = c("orange", "green"))
+boxplot(FieldGoals ~ Win, data = nba_reduced_train, main = "FieldGoals vs win", 
+        col = c("orange", "green"))
+boxplot(Assists ~ Win, data = nba_reduced_train, main = "Assists vs win", 
+        col = c("orange", "green"))
+boxplot(Steals ~ Win, data = nba_reduced_train, main = "Steals vs win", 
+        col = c("orange", "green"))
+boxplot(Blocks ~ Win, data = nba_reduced_train, main = "Blocks vs win", 
+        col = c("orange", "green"))
+boxplot(OpponentPoints ~ Win, data = nba_reduced_train, main = "OpponentPoints vs win", 
+        col = c("orange", "green"))
+boxplot(TotalRebounds ~ Win, data = nba_reduced_train, main = "TotalRebounds vs win", 
+        col = c("orange", "green"))
+boxplot(Turnovers ~ Win, data = nba_reduced_train, main = "Turnovers vs win", 
+        col = c("orange", "green"))
+counts <- table(nba_reduced_train$Home, nba_reduced_train$Win)
+barplot(counts, main="Home Vs Win",
+  xlab="Wins or not", 
+  ylab = "Home", 
+  col=c("purple","red"),
+  legend.text = TRUE, 
+  beside = TRUE, 
+  args.legend = list(x = "bottom", inset = c(0, -0.75), horiz = T, 
+                     cex = 0.8))
+
+```
+1) For Win vs Teampoints, the boxplot shows that CHO team has higher win average teampoints around 110 than average teampoints of loss around 95, there are one outlier when win = 0 and three outliers when win = 1, though CHO team has the number of winning games less than the number of losing games. 
+2) For Win vs FieldGoals, the boxplot shows that CHO team has higher average numbers of fieldgoals around 40 if they win than they don't win that the number is around 35, also there are four outliers when win = 1. 
+3) For win vs assists, the boxplot shows that the average number of assists if team wins is around 23 and higher than the team is lose around 20. There are one outlier in separate two conditions. 
+4) For win vs steals, the boxplot shows little differece between that the average number of steams if team wins is around 7 which is higher than the team is lose around 6. The range of boxplot when win = 1 is higher than the team if win = 0. There are 3 outliers in boxplot of win = 0 and one outlier in boxplot of win = 1. 
+5) For win vs blocks, the boxplots don't shows much differece between that the average number of blocks if team wins which is around 5 which is little higher than the team is lose which is around 4. The range of boxplot when win = 1 is higher than the team if win = 0. There are 3 outliers in boxplot of win = 0. 
+6) For win vs opponent points, the boxplots show that the average opponent points if team lose which is around 105 which is higher than the team wins which is around 95. The range of two boxplot are similar.There are 1 outlier in boxplot of win = 0 and two outliers in boxplot when CHO team wins. 
+7) For win vs total rebounds, the boxplots show that the average number of total rebounds if team wins which is around 45 which is higher than the team lose which is around 42. The range of two boxplot are similar.There are 2 outliers in boxplot of win = 0 and 1 outliers in boxplot when CHO team wins. 
+8) For win vs turnovers, the boxplots show that the average number of turnovers if team wins which is around 12 which is nearly equal to the team lose which is around 12. The range of boxplot (win = 0) is larger than (win = 1). It seems like that the number of turnovers doesn't impact the result that if the team win or not. 
+9) For win vs Home, the bar chart shows that when team loses, the number of games is away home is around 80 which is higher than the number of games is at home (number is around 50). When team wins, the number of games is away home is around 50 which is less than the number of games is at home (number is around 70.) So maybe the factor can impact the probability of wins or losses. 
+
+Question 2
+
+Because the logistic regression evaluate the relationship between predictor variables (either categorical or continuous) vs binary response variables, so we can't use Date, Team, Game and Opponent variables as predictors. Also, we need to avoid the use of highly correlated variables to avoid the multicollinearity. For example, OffRebounds and TotalRebounds cannot be used as predictors at the same time with Win, because TotalRebound include OffRebounds. And the combination of Opp.X3PointShotsAttempted cannot be used with Opp.FieldGoals and Opp.FieldGoalsAttempted because it depends on the calculation of these two variables. Also, the Teampoints and Fieldgoals cannot be as predictors together because these scores are closely related in a game. 
+
+Question 3
+```{r, echo=FALSE, message=FALSE, }
+nbal<- glm(Win ~ Home + TeamPoints + FieldGoals. + Assists + Steals + Blocks 
+           + TotalRebounds
+           + Turnovers, data = nba_reduced_train, family = binomial)
+stargazer(coef(summary(nbal)), title= "Logistic Regression Results", 
+          type = "text",digits = 2,font.size = "tiny",
+          column.sep.width = "1pt")
+# summary(nbal)
+```
+
+From the results of logistic regression model above, there are some significant variables with Win including Home,FieldGoals.,Assits,Steals, TotalRebounds and Turnovers because they show the p-values less than 0.05, but FieldGoals and Blockshave p-values larger than 0.05 so shows no significance with Win. The fitted model says that, when holding FieldGoals.,Assits,Steals, TotalRebounds and Turnovers at a fixed value, the odds of winning the game if the team is a home game (Home = Home) over the odds of winning the game if the team is away game (Home = away) is exp(1.11) = 3.03. In terms of percent change, we can say that the odds for CHO team with Home = Home game are 203% higher than the odds for CHO team with Home = away game. The coefficient for FieldGoals. says that, holding Home, Assits,Steals, TotalRebounds and Turnovers at a fixed value, we will see increase in the odds of winning the game for a one-unit increase in FieldGoals. since exp(43.951) = 1.22*10^19. The coefficient for Assits says that, holding Home, FieldGoals.,Steals, TotalRebounds and Turnovers at a fixed value, we will see 10% decrease in the odds of winning the game for a one-unit increase in Assists since exp(-0.11) = 0.9.  The coefficient for Steals says that, holding Home,FieldGoals.,Assits,Steals, TotalRebounds and Turnovers at a fixed value, we will see 48% increase in the odds of winning the game for a one-unit increase in Steals since exp(0.39) = 1.48. The coefficient for TotalRebounds says that, holding Home,FieldGoals.,Assits,Steals, TotalRebounds and Turnovers at a fixed value, we will see 32% increase in the odds of winning the game for a one-unit increase in TotalRebounds since exp(0.28) = 1.32. The coefficient for Turnovers says that, holding Home,FieldGoals.,Assits,Steals, TotalRebounds at a fixed value, we will see 16% decrease in the odds of winning the game for a one-unit increase in TotalRebounds since exp(-0.17) = 0.84. 
+
+```{r, echo=FALSE, message=FALSE, }
+## Model Dignostics
+# rawresid1 <- residuals(nbal, "resp")
+# binnedplot(x = fitted(nbal), y = rawresid1, xlab = "Pred.probablities", 
+           # col.int = "red", ylab = "Avg.residuals", main = "Binned residual plot", col.pts = "orange")
+```
+
+Question 4
+```{r, echo=FALSE, message=FALSE, }
+stargazer(vif(nbal), type = "text", title = "VIF Analysis")
+```
+From the VIF table, there are three variables larger than 2 which are TeamPoints and FieldGoals, others's VIF are nearly closed to 1, so all variables represent no multicollinearity. No variables have VIF larger than 5 so there are no potential risk of multilinearity. 
+
+Question 5
+```{r, echo=FALSE, message=FALSE, }
+## confusion matrix
+conf_nba<-confusionMatrix(as.factor(ifelse(fitted(nbal) >= 0.5,"1", "0")), 
+                nba_reduced_train$Win, positive = "1")
+conf_nba$table
+round(conf_nba$overall["Accuracy"],2)
+# round(conf_nba$byClass[c("Sensitivity", "Specificity")],2)
+## look at ROC curve
+# roc1<-roc(nba_reduced_train$Win, fitted(nbal), plot = T, print.thres = "best"
+#, legacy.axes = T,
+    # print.auc = T, col = "steelblue")
+```
+The sensitivity is around 0.8 and the area under the ROC curve is around 0.898 near one, which means that it is good fitting if the area is near one. The overall ROC curve toward the upper left corner but still have improvement. The accuracy of the model is 0.81. The AUC is 0.897. All roc curves are below to show the results. 
+
+Question 6
+```{r, echo=FALSE, message=FALSE, }
+# centering the continuous predictors
+# nba_reduced_train$Opp.FieldGoals._1 <- nba_reduced_train$Opp.FieldGoals. - 
+# mean(nba_reduced_train$Opp.FieldGoals.)
+nbal2<- glm(Win ~ Home + TeamPoints + FieldGoals. + Assists + Steals + Blocks +
+              TotalRebounds + 
+              Turnovers + Opp.FieldGoals.+
+              Opp.TotalRebounds+  Opp.TotalFouls + Opp.Turnovers, 
+            data = nba_reduced_train, family = binomial)
+stargazer(coef(summary(nbal2)), title= "Logistic Regression Results", 
+          type = "text",digits = 2,font.size = "tiny",
+          column.sep.width = "1pt")
+# summary(nbal2)
+
+```
+From the results of logistic regression model above, there are some siginificant varaibles with Win including Home, TeamPoints, FieldGoals., Turnovers, Opp.FieldGoals., Opp.TotalRebounds, Opp.Turnovers because they show the p-values less than 0.05, but others like Assists, Steals, Blocks, TotalRebounds, Opp.TotalFouls have p-values larger than 0.05 so shows so significance with Win variable.The fitted model says that, when holding TeamPoints,FieldGoals., Turnovers, Opp.Turnovers, Opp.TotalRebounds and Opp.FieldGoals. at a fixed value, the odds of winning the game if the team is a home game (Home = Home) over the odds of winning the game if the team is away game (Home = away) is exp(1.53) = 4.62. In terms of percent change, we can say that the odds for CHO team with Home = Home game are 362% higher than the odds for CHO team with Home = away game.  The coefficient for Teampoints says that, holding FieldGoals., Turnovers, Opp.FieldGoals., Opp.TotalRebounds, Opp.Turnovers at a fixed value, we will see 15% increase in the odds of winning the game for a one-unit in teampoints since exp(0.14) =  1.15. The coefficient for Turnover says that, holding Home, TeamPoints, FieldGoals., Turnovers, Opp.FieldGoals., Opp.TotalRebounds, Opp.Turnovers at a fixed value, we will see 42% decrease in the odds of wining the game for a one-unit increase in Turnover since exp(-0.55) = 0.58. The coefficient for Opp.Turnovers says that, holding Home, TeamPoints, FieldGoals., Turnovers, Opp.FieldGoals., Opp.TotalRebounds, at a fixed value, we will see the 84% increase in the odds of winning the game for a one-unit increase since exp(0.61) = 1.84. The coefficient for Opp.FieldGoals.says that, holding Home, TeamPoints, FieldGoals., Turnovers, Opp.FieldGoals., Opp.TotalRebounds, Opp.Turnovers at a fixed value, we will see the decrease in the odds of winning the game for a one-unit increase since exp(-86.3) = 3.31*10^-38. The coefficient for Opp.TotalRebounds says that, holding Home, TeamPoints, Turnovers, Opp.Turnovers and Opp.FieldGoals._1 at a fixed value, we will see the 30% decrease in the odds of winning the game for a one-unit increase since exp(-0.36) = 0.7. The coefficient for FieldGoals. says that, holding Home, TeamPoints, FieldGoals., Turnovers, Opp.FieldGoals., Opp.TotalRebounds, Opp.Turnoversat a fixed value, we will see the increase in the odds of winning the game for a one-unit increase since exp(40.17).
+
+Question 7
+```{r, echo=FALSE, message=FALSE, }
+## confusion matrix
+conf_nbal2<-confusionMatrix(as.factor(ifelse(fitted(nbal2) >= 0.5,"1", "0")), 
+                nba_reduced_train$Win, positive = "1")
+conf_nbal2$table
+round(conf_nbal2$overall["Accuracy"],2)
+# round(conf_nba$byClass[c("Sensitivity", "Specificity")],2)
+## look at ROC curve
+# roc2<-roc(nba_reduced_train$Win, fitted(nbal2), plot = T, print.thres = 
+#"best", legacy.axes = T,
+    # print.auc = T, col = "steelblue")
+
+```
+The accuracy is 0.93, but the area under the ROC curve increased to  0.9834 which is very near one, and means that it is good fitting. The overall ROC curve toward the upper left corner. So I will choose this model to continue to predict the odds of winning. ROC curve are below to show. 
+
+Question 8
+```{r, echo=FALSE, message=FALSE, }
+nba_reduced_test$Win <- factor(nba_reduced_test$Win)
+nba_reduced_test$Home <- factor(nba_reduced_test$Home)
+pred <- predict(nbal2, newdata = nba_reduced_test, type = "response")
+y_pred_num <- ifelse(pred >= 0.5, 1, 0)
+y_act <- nba_reduced_test$Win
+# accuracy
+round(mean(y_pred_num == y_act),2)
+```
+The prediction accuracy is 87%, which is good. 
+
+Question 9
+```{r, echo=FALSE, message=FALSE, }
+nbal4<- glm(Win ~ Home + TeamPoints + FieldGoals. + Assists + Steals + Blocks + 
+              TotalRebounds + 
+              Turnovers + Opp.FieldGoals.+
+              Opp.TotalRebounds+  Opp.TotalFouls + Opp.Turnovers +  Opp.Assists 
+            + Opp.Blocks
+            , data = nba_reduced_train, family = binomial)
+# stargazer(coef(summary(nbal4)), title= "Logistic Regression Results", type = 
+# "text",digits = 2,font.size = "tiny",column.sep.width = "1pt")
+# summary(nbal4)
+```
+
+```{r, echo=FALSE, message=FALSE, }
+stargazer(anova(nbal4, nbal2, test = "Chisq"), type = "text", title = "Anova Test")
+# anova(nbal4, nbal2, test = "Chisq")
+```
+The residuals of deviance tests are 82.32 and 80.78. The p-value of chi-square is larger than 0.05 so we conclude that it's not significant to use the new model including Opp.Assits and Opp.Blocks. 
+
+```{r, echo=FALSE, message=FALSE, }
+nbal5<- glm(Win ~ Home + TeamPoints + FieldGoals. + Assists + Steals + Blocks 
+            + TotalRebounds + 
+              Turnovers + Opp.FieldGoals.+ X3PointShots+
+              Opp.TotalRebounds+  Opp.TotalFouls + Opp.Turnovers, 
+            data = nba_reduced_train, family = binomial)
+stargazer(coef(summary(nbal5)), title= "Logistic Regression Results", 
+          type = "text",digits = 2,font.size = "tiny",
+          column.sep.width = "1pt")
+# summary(nbal5)
+```
+
+```{r, echo=FALSE, message=FALSE, }
+## confusion matrix
+conf_nbal5<-confusionMatrix(as.factor(ifelse(fitted(nbal5) >= 0.5,"1", "0")), 
+                nba_reduced_train$Win, positive = "1")
+conf_nbal5$table
+round(conf_nbal5$overall["Accuracy"],2)
+# round(conf_nba$byClass[c("Sensitivity", "Specificity")],2)
+## look at ROC curve
+par(mfrow=c(2,3))
+roc1<-roc(nba_reduced_train$Win, fitted(nbal), plot = T, print.thres 
+          = "best", legacy.axes = T,
+    print.auc = T, col = "steelblue")
+roc2<-roc(nba_reduced_train$Win, fitted(nbal2), plot = T, print.thres 
+          = "best", legacy.axes = T,
+    print.auc = T, col = "steelblue")
+roc5<- roc(nba_reduced_train$Win, fitted(nbal5), plot = T, print.thres 
+           = "best", legacy.axes = T,
+    print.auc = T, col = "steelblue")
+# stargazer(anova(nbal5, nbal2, test = "Chisq"), type = "text", title = "Anova Test")
+```
+I added all three roc here to do the comparison. The accurary is 0.95. Compared to the nbal2, the The p-value of X3PointShots is less than 0.05 which shows the significance with response variable Win. While the area under the ROC curve increased to 0.9884 which is very near one, and means that it is good fitting. The overall ROC curve toward the upper left corner.
+
+Question 10
+
+In conclusion, the probablity of wins or not in a team depends on many variables, so that's why we need to use logistic regression to find the relationship and increase the probablity to win the game. Besides the variables mentioned in the questions, I also add the X3PointShots to see if this can improve the model, so it does. Also, teampoints variable made me surprising because it doesn't show the significance in the model. Overall, if we can use this model to test the game and reduce turnovers, OPP.total rebounds, the team will increase the winning probablity. 
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
+
