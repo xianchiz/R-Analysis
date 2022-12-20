@@ -1,0 +1,518 @@
+---
+title: "Data Assignment 4"
+author: "Xianchi Zhang"
+date: '2022-11-17'
+output: pdf_document
+---
+
+```{r, echo=FALSE, message=FALSE, }
+### some packages
+library(stargazer)
+library(arm)
+library(pROC)
+library(e1071)
+library(caret)
+library(nnet)
+library(knitr)
+library(MASS)
+library(ggplot2)
+library(foreign)
+```
+
+```{r, echo=FALSE, message=FALSE, }
+### load the data
+##  setwd("~/Documents/Duke MIDS/First semester/ids 702")
+load(file = "airline_survey")
+#str(airline)
+airline$Gender <- factor(airline$Gender)
+airline$Customer.Type <- factor(airline$Customer.Type)
+airline$Type.of.Travel <- factor(airline$Type.of.Travel)
+airline$Class <- factor(airline$Class)
+airline$Inflight.wifi.service <- factor(airline$Inflight.wifi.service)
+airline$Online.boarding <- factor(airline$Online.boarding)
+airline$Inflight.entertainment <- factor(airline$Inflight.entertainment)
+airline$Food.and.drink <- factor(airline$Food.and.drink)
+airline$Seat.comfort <- factor(airline$Seat.comfort)
+airline$On.board.service <- factor(airline$On.board.service)
+airline$Leg.room.service <- factor(airline$Leg.room.service)
+airline$Departure.Arrival.time.convenient <- factor(airline$Departure.Arrival.time.convenient)
+airline$Baggage.handling <- factor(airline$Baggage.handling)
+airline$Gate.location <- factor(airline$Gate.location)
+airline$Cleanliness <- factor(airline$Cleanliness)
+airline$Checkin.service <- factor(airline$Checkin.service)
+airline$Inflight.service <- factor(airline$Inflight.service)
+airline$Ease.of.Online.booking <- factor(airline$Ease.of.Online.booking)
+#str(airline)
+```
+
+```{r, echo=FALSE, message=FALSE, }
+dim(airline)
+par(mfrow=c(2,2))
+airt <- table(airline$Satisfaction)
+airt
+round(prop.table(airt),2)
+round(prop.table(table(airline$Satisfaction, airline$Gender)),2)
+round(prop.table(table(airline$Satisfaction, airline$Type.of.Travel)),2)
+```
+
+Introduction: The goal of data analysis is to find some services that are worth investing so that can improve customers' satisfaction and increase company sales. The tables above show the distribution of customers in the different satisfaction categories. Overall, we can see that 3478 customer take the survey, there are 988 customers which represent 28% of total who feel dissatisfied to LaneAir, there are 932 customer which represent 27% of total who feel neutral to LaneAire, there are 1558 customer which represent 45% of total who feel satisfied to the LaneAir. From the perspective of gender analysis, there are no distinguished differences exist in three satisfaction categories. In terms of the perspective of type of travel analysis, there are one clear difference between business travel and personal travel in satisfied category, the total 45% satisfation consist of 42% customers which are from business type, only 3% from personal type. I think the preliminary analysis is due to different reasons for the service itself.
+
+Methods: For this dataset, I mainly use multinomial logistic regression model after comparing with ordinal model to handle the questions. Why I choose this model is that our response variable is a categorical one which separate the customers satisfaction level as dissatisfied, neutral and satisfied. And the predictor variables include continuous (numbers) and categorical variables. So I will use these predictors to analyze which one haveimpact on the customer satisfaction and I will also utilize this model results and investments levels to give relative recommendations. After compared with ordinal model, the accuracy of multinomial is higher than ordinal one. 
+
+Results&Conclusions: 1. From the data analysis, we can first analyze the first least difficult investment. we can conclude that we can do more marketing initatives to the customer who are loyal because they have high possibility to feel satisfied to LaneAir service, so do more marketing activities to the loyal customers are effective. For the customers who have personal travel, the odds of customers feel neutral to the service are higher than who feel dissatified to the service, but the customers feel satisfied are similar to the dissatisfied group, so we don't need to invest more on this criteria. 
+2. we can then analyze the second investment. For increasing wifi service, there are less effect on customer who feel neutral to Laneair first. For a customer who orignially completely doesn't satisfy or do satisfy the wifi service, the odds of feel neutral are higher than the odds of feel dissatisfied, and the odds of feel satisfied are less than odds of dissatisfied. So, that means increasing wifi service is can be a factor to increase customer satisfaction from dissatisfaction to neutral, but for increasing odds of satisfaction, maybe only wifi factor is not enough or wifi satisfaction level is saturated for those satisfied customer, but a bad wifi service will make customer dissatisfied to the service. In my model, I don't add entertainment service because it doesn't have significant impact on the satisfaction level. 
+3. For the third investment, onboarding service and cleanliness are not siginifantly impact the satisfaction level; however, inflight service can be a factor to increase customers satisfaction. But for the customers who feel satisfied or completely satisfied for the inflight service, the odds of feel satisfied are higher than odds of dissatisifed, so those people may think inflight service is an important factor to improve their satisfaction.
+4. the model think the delay minitus are not significant factors, so we don't need to consider this factor
+5. for the seat comfort and leg room service, they have more effects on customers who orginally doesn't satisfy these two service or completely satisfy the these two service, so maybe these two are key factors to improve their satisfaction. 
+
+Part2: Data Scientists
+1. data overview and analysis plan
+
+```{r, echo=FALSE, message=FALSE, }
+###### EDA Analysis : associations of satisfaction with some continuous variables
+par(mfrow=c(3,1))
+boxplot(Flight.Distance~Satisfaction, data = airline, main = "satisfaction vs flight distance", 
+        col = c("orange", "green"))
+boxplot(Departure.Delay.in.Minutes~Satisfaction, data = airline, main = "satisfaction vs departure delay minutes", 
+        col = c("orange", "green"))
+boxplot(Arrival.Delay.in.Minutes~Satisfaction, data = airline, main = "satisfaction vs arrival delay minutes", 
+        col = c("orange", "green"))
+
+
+```
+
+From the graph above, it shows that the satisfied category mainly come from the longer flight distance, and three  median values are similar in three satisfaction categories. But from satisfaction vs arrival delay minutes and departure delay minutes, it seems like they doesn't have some impact in satisfaction. 
+
+```{r, echo=FALSE, message=FALSE, }
+###### EDA Analysis : associations of satisfaction with some categorical variables
+round(prop.table(table(airline$Satisfaction, airline$Inflight.wifi.service)),2)
+round(prop.table(table(airline$Satisfaction, airline$Type.of.Travel)),2)
+
+
+```
+From the inflight wifi service, the proportion table shows that most satisfied customer who choose 4 or 5 mostly, and some dissatisfied customers are also concerned about this service, so maybe this one would be a factor. From the type of travel, 42% satisfied customer feel business travel better, this may be due to they don't need to pay for the flight fees. Other two categories don't have much differences between business and personal travel.
+
+
+```{r, echo=FALSE, message=FALSE, }
+## part1: multinomial logistic model ##
+## Satisfaction = dissatisfied is the reference level. 
+#airline1 <- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type + Flight.Distance + Inflight.wifi.service+
+                       #Ease.of.Online.booking + Inflight.service + Online.boarding+
+                       #Inflight.entertainment+Food.and.drink+Seat.comfort+
+                       #On.board.service+Leg.room.service+
+                       #Departure.Arrival.time.convenient+
+                       #Baggage.handling+Gate.location+Cleanliness
+                     #+Checkin.service+Departure.Delay.in.Minutes+
+                     #Arrival.Delay.in.Minutes, data = airline)
+#summary(airline1)
+#exp(coef(airline1))
+#confint(airline1)
+#exp(confint(airline1))
+#output <- summary(airline1)
+#z_value <- output$coefficients/output$standard.errors
+#p_value <- (1- pnorm(abs(z_value), 0, 1))*2
+#full_summary <- lapply(c("neutral", "satisfied"), function(x) rbind(output$coefficients[as.character(x),],
+                                                                   # output$standard.errors[as.character(x),],
+                                                                    #z_value[as.character(x),],
+                                                                    #p_value[as.character(x),]))
+
+#kable(lapply(full_summary,function(x) {rownames(x) <- c("Coefficient", "Std.Errors", "z-value", "p-value");x}))
+```
+
+
+
+```{r, echo=FALSE, message=FALSE, }
+############ Deviance test
+# From p-value results which are larger than 0.05, first test if gender is a useful predictor
+#airlinenogender<- multinom(Satisfaction ~Age+ Type.of.Travel+Class+Customer.Type + Flight.Distance + Inflight.wifi.service+
+                       #Ease.of.Online.booking + Inflight.service + Online.boarding+
+                       #Inflight.entertainment+Food.and.drink+Seat.comfort+
+                       #On.board.service+Leg.room.service+
+                       #Departure.Arrival.time.convenient+
+                       #Baggage.handling+Gate.location+Cleanliness
+                     #+Checkin.service+Departure.Delay.in.Minutes+
+                     #Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenogender, test = "Chisq")
+#P-value is larger than 0.05, so gender is not a useful predictor
+
+# test age
+#airlinenoage<- multinom(Satisfaction ~Gender+ Type.of.Travel+Class+Customer.Type + Flight.Distance + Inflight.wifi.service+
+                       #Ease.of.Online.booking + Inflight.service + Online.boarding+
+                       #Inflight.entertainment+Food.and.drink+Seat.comfort+
+                       #On.board.service+Leg.room.service+
+                       #Departure.Arrival.time.convenient+
+                       #Baggage.handling+Gate.location+Cleanliness
+                     #+Checkin.service+Departure.Delay.in.Minutes+
+                     #Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenoage, test = "Chisq")
+#P-value is larger than 0.05, so age is not a useful predictor
+
+# test Type.of.Travel
+#airlinenotot<- multinom(Satisfaction ~Gender+ Age +Class+Customer.Type + Flight.Distance + Inflight.wifi.service+
+                       #Ease.of.Online.booking + Inflight.service + Online.boarding+
+                       #Inflight.entertainment+Food.and.drink+Seat.comfort+
+                       #On.board.service+Leg.room.service+
+                       #Departure.Arrival.time.convenient+
+                       #Baggage.handling+Gate.location+Cleanliness
+                     #+Checkin.service+Departure.Delay.in.Minutes+
+                     #Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenotot, test = "Chisq")
+#P-value is less than 0.05, so Type.of.Travel is a useful predictor
+
+# test Class
+#airlinenoclass<- multinom(Satisfaction ~Gender+ Age +Type.of.Travel+Customer.Type + Flight.Distance + Inflight.wifi.service+
+                       #Ease.of.Online.booking + Inflight.service + Online.boarding+
+                      # Inflight.entertainment+Food.and.drink+Seat.comfort+
+                     #  On.board.service+Leg.room.service+
+                      # Departure.Arrival.time.convenient+
+                     #  Baggage.handling+Gate.location+Cleanliness
+                    # +Checkin.service+Departure.Delay.in.Minutes+
+                    # Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenoclass, test = "Chisq")
+#P-value is larger than 0.05, so Class is not a useful predictor
+
+
+# then test customer.type
+#airlinenoct<- multinom(Satisfaction ~Gender+ Age +Type.of.Travel+Class + Flight.Distance + Inflight.wifi.service+
+                      # Ease.of.Online.booking + Inflight.service + Online.boarding+
+                     #  Inflight.entertainment+Food.and.drink+Seat.comfort+
+                      # On.board.service+Leg.room.service+
+                     #  Departure.Arrival.time.convenient+
+                     #  Baggage.handling+Gate.location+Cleanliness
+                   #  +Checkin.service+Departure.Delay.in.Minutes+
+                   #  Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenoct, test = "Chisq")
+# p-value is less than 0.05, so customer type is a useful predictor
+
+# test flight distance
+#airlinenofd<- multinom(Satisfaction ~Gender+ Age +Type.of.Travel+Customer.Type +Class + Inflight.wifi.service+
+                     #  Ease.of.Online.booking + Inflight.service + Online.boarding+
+                     #  Inflight.entertainment+Food.and.drink+Seat.comfort+
+                     #  On.board.service+Leg.room.service+
+                     #  Departure.Arrival.time.convenient+
+                     #  Baggage.handling+Gate.location+Cleanliness
+                    # +Checkin.service+Departure.Delay.in.Minutes+
+                   #  Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenofd, test = "Chisq")
+# p-value is larger than 0.05, flight distance is not a useful predictor
+
+## test inflight wifi service
+#airlinenoiw<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type + 
+                      #Flight.Distance + 
+                     #  Ease.of.Online.booking + Inflight.service + Online.boarding+
+                     #  Inflight.entertainment+Food.and.drink+Seat.comfort+
+                      # On.board.service+Leg.room.service+
+                     #  Departure.Arrival.time.convenient+
+                      # Baggage.handling+Gate.location+Cleanliness
+                     #+Checkin.service+Departure.Delay.in.Minutes+
+                    # Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenoiw, test = "Chisq")
+# p-value is less than 0.05, inflight wifi service is a useful predictor
+
+## test Ease.of.Online.booking
+#airlinenoeob<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                      #  + Flight.Distance + Inflight.wifi.service+
+                      # Inflight.service + Online.boarding+
+                      # Inflight.entertainment+Food.and.drink+Seat.comfort+
+                     #  On.board.service+Leg.room.service+
+                     #  Departure.Arrival.time.convenient+
+                     #  Baggage.handling+Gate.location+Cleanliness
+                   #  +Checkin.service+Departure.Delay.in.Minutes+
+                   #  Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenoeob, test = "Chisq")
+# p-value is less than 0.05 
+
+## test Inflight.service
+#airlinenois<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                     #  + Flight.Distance + Inflight.wifi.service+
+                      # Ease.of.Online.booking + Online.boarding+
+                      # Inflight.entertainment+Food.and.drink+Seat.comfort+
+                     #  On.board.service+Leg.room.service+
+                    #   Departure.Arrival.time.convenient+
+                     #  Baggage.handling+Gate.location+Cleanliness
+                    # +Checkin.service+Departure.Delay.in.Minutes+
+                    # Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenois, test = "Chisq")
+# p-value is less than 0.05, Inflight.service is a useful predictor
+
+## test Online.boarding
+#airlinenoob<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                     #  + Flight.Distance + Inflight.wifi.service+
+                     #  Ease.of.Online.booking + Inflight.service+
+                       #Inflight.entertainment+Food.and.drink+Seat.comfort+
+                     #  On.board.service+Leg.room.service+
+                     #  Departure.Arrival.time.convenient+
+                     #  Baggage.handling+Gate.location+Cleanliness
+                   #  +Checkin.service+Departure.Delay.in.Minutes+
+                    # Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenoob, test = "Chisq")
+# p-value is less than 0.05, Online.boarding is a useful predictor
+
+## test Inflight.entertainment
+#airlinenoie<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                      # + Flight.Distance + Inflight.wifi.service+
+                      # Ease.of.Online.booking + Inflight.service + Online.boarding+
+                      # Food.and.drink+Seat.comfort+
+                      # On.board.service+Leg.room.service+
+                      # Departure.Arrival.time.convenient+
+                      # Baggage.handling+Gate.location+Cleanliness
+                    # +Checkin.service+Departure.Delay.in.Minutes+
+                    # Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenoie, test = "Chisq")
+# p-value is nearly equal to 0.05, Inflight.entertainment is not a useful predictor
+
+## test Food.and.drink
+#airlinenofd<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                      # + Flight.Distance + Inflight.wifi.service+
+                      # Ease.of.Online.booking + Inflight.service + Online.boarding+
+                      # Inflight.entertainment+Seat.comfort+
+                      # On.board.service+Leg.room.service+
+                      # Departure.Arrival.time.convenient+
+                      # Baggage.handling+Gate.location+Cleanliness
+                    # +Checkin.service+Departure.Delay.in.Minutes+
+                    # Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenofd, test = "Chisq")
+# p-value is larger than 0.05, so food and drink is not a useful predictor
+
+## test Seat.comfort
+#airlinenosc<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                     #  + Flight.Distance + Inflight.wifi.service+
+                      # Ease.of.Online.booking + Inflight.service + Online.boarding+
+                      # Inflight.entertainment+Food.and.drink+
+                      # On.board.service+Leg.room.service+
+                      # Departure.Arrival.time.convenient+
+                     #  Baggage.handling+Gate.location+Cleanliness
+                    # +Checkin.service+Departure.Delay.in.Minutes+
+                   #  Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenosc, test = "Chisq")
+# p-value is less than 0.05, so Seat.comfort is a useful predictor
+
+## test On.board.service
+#airlinenobs<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                     #  + Flight.Distance + Inflight.wifi.service+
+                      # Ease.of.Online.booking + Inflight.service + Online.boarding+
+                     #  Inflight.entertainment+Food.and.drink+Seat.comfort+
+                     #  Leg.room.service+
+                     #  Departure.Arrival.time.convenient+
+                    #   Baggage.handling+Gate.location+Cleanliness
+                   #  +Checkin.service+Departure.Delay.in.Minutes+
+                   #  Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenobs, test = "Chisq")
+# p-value is larger than 0.05, so On.board.service is not a useful predictor
+
+## test Leg.room.service
+#airlinenolr<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                      # + Flight.Distance + Inflight.wifi.service+
+                     #  Ease.of.Online.booking + Inflight.service + Online.boarding+
+                     #  Inflight.entertainment+Food.and.drink+Seat.comfort+
+                      # On.board.service+
+                     #  Departure.Arrival.time.convenient+
+                     #  Baggage.handling+Gate.location+Cleanliness
+                    # +Checkin.service+Departure.Delay.in.Minutes+
+                    ## Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenolr, test = "Chisq")
+# p-value is less than 0.05, so Leg.room.service is a useful predictor
+
+## test Departure.Arrival.time.convenient
+#airlinenodatc<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                        # + Flight.Distance + Inflight.wifi.service+
+                     #  Ease.of.Online.booking + Inflight.service + Online.boarding+
+                     #  Inflight.entertainment+Food.and.drink+Seat.comfort+
+                     #  On.board.service+Leg.room.service+
+                     #  Baggage.handling+Gate.location+Cleanliness
+                    # +Checkin.service+Departure.Delay.in.Minutes+
+                    # Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenodatc, test = "Chisq")
+# p-value is less than 0.05, so Departure.Arrival.time.convenient is a useful predictor
+
+## test Baggage.handling
+#airlinenobh<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                     #  + Flight.Distance + Inflight.wifi.service+
+                      # Ease.of.Online.booking + Inflight.service + Online.boarding+
+                    #   Inflight.entertainment+Food.and.drink+Seat.comfort+
+                      # On.board.service+Leg.room.service+
+                      # Departure.Arrival.time.convenient+
+                     # Gate.location+Cleanliness
+                     #+Checkin.service+Departure.Delay.in.Minutes+
+                    # Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenobh, test = "Chisq")
+# p-value is less than 0.05, so Baggage.handling is a useful predictor
+
+## test Gate.location
+#airlinenogl<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                     #  + Flight.Distance + Inflight.wifi.service+
+                      # Ease.of.Online.booking + Inflight.service + Online.boarding+
+                      # Inflight.entertainment+Food.and.drink+Seat.comfort+
+                     #  On.board.service+Leg.room.service+
+                      # Departure.Arrival.time.convenient+
+                      # Baggage.handling+Cleanliness
+                   # +Checkin.service+Departure.Delay.in.Minutes+
+                    # Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenogl, test = "Chisq")
+# p-value is less than 0.05, so Gate.location is a useful predictor
+
+## test Cleanliness
+#airlinenoce<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                     #  + Flight.Distance + Inflight.wifi.service+
+                      # Ease.of.Online.booking + Inflight.service + Online.boarding+
+                     #  Inflight.entertainment+Food.and.drink+Seat.comfort+
+                      # On.board.service+Leg.room.service+
+                    #   Departure.Arrival.time.convenient+
+                      # Baggage.handling+Gate.location
+                     #+Checkin.service+Departure.Delay.in.Minutes+
+                    # Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenoce, test = "Chisq")
+# p-value is larger than 0.05, so Cleanliness is not a useful predictor
+
+## test Checkin.service
+#airlinenocs<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                      # + Flight.Distance + Inflight.wifi.service+
+                      # Ease.of.Online.booking + Inflight.service + Online.boarding+
+                      # Inflight.entertainment+Food.and.drink+Seat.comfort+
+                      # On.board.service+Leg.room.service+
+                      # Departure.Arrival.time.convenient+
+                      # Baggage.handling+Gate.location+Cleanliness
+                   # +Departure.Delay.in.Minutes+
+                     #Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenocs, test = "Chisq")
+# p-value is less than 0.05, so Checkin.service is a useful predictor
+
+## test Departure.Delay.in.Minutes
+#airlinenoddim<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                       #  + Flight.Distance + Inflight.wifi.service+
+                      # Ease.of.Online.booking + Inflight.service + Online.boarding+
+                      # Inflight.entertainment+Food.and.drink+Seat.comfort+
+                      # On.board.service+Leg.room.service+
+                      # Departure.Arrival.time.convenient+
+                      # Baggage.handling+Gate.location+Cleanliness
+                    # +Checkin.service+
+                   #  Arrival.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenoddim, test = "Chisq")
+# p-value is larger than 0.05, so Departure.Delay.in.Minutes is not a useful predictor
+
+## test Arrival.Delay.in.Minutes
+#airlinenoadim<- multinom(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type
+                       #  + Flight.Distance + Inflight.wifi.service+
+                      # Ease.of.Online.booking + Inflight.service + Online.boarding+
+                      # Inflight.entertainment+Food.and.drink+Seat.comfort+
+                     #  On.board.service+Leg.room.service+
+                      # Departure.Arrival.time.convenient+
+                      # Baggage.handling+Gate.location+Cleanliness
+                    # +Checkin.service+Departure.Delay.in.Minutes, data = airline)
+#anova(airline1, airlinenoadim, test = "Chisq")
+# p-value is larger than 0.05, so Arrival.Delay.in.Minutes is not a useful predictor
+```
+
+
+2. Model results(a table including odds ratios, confidence intervals and p-values, interpreting the results)
+
+```{r, echo=FALSE, message=FALSE, }
+#################final model
+airline_final <- multinom(Satisfaction ~ Type.of.Travel+Customer.Type
+                       + Inflight.wifi.service+
+                       Ease.of.Online.booking + Inflight.service + Online.boarding+
+                      Seat.comfort+
+                       Leg.room.service+
+                      Departure.Arrival.time.convenient+
+                       Baggage.handling+Gate.location
+                     +Checkin.service, data = airline)
+#summary(airline_final)
+#exp(coef(airline_final))
+#confint(airline_final)
+ #exp(confint(airline_final))
+output <- summary(airline_final)
+z_value <- output$coefficients/output$standard.errors
+p_value <- (1- pnorm(abs(z_value), 0, 1))*2
+# full_summary1 <- lapply(c("neutral", "satisfied"), function(x) rbind(output$coefficients[as.character(x),],
+                                                                   #output$standard.errors[as.character(x),],
+                                                                    #z_value[as.character(x),],
+                                                                    #p_value[as.character(x),]))
+
+# kable(lapply(full_summary1,function(x) {rownames(x) <- c("Coefficient", "Std.Errors", "z-value", "p-value");x}))
+```
+
+
+
+3. Model assessment(compared with ordinal model)
+
+```{r, echo=FALSE, message=FALSE, }
+########### predicted probablities for cases in the model
+predprobs <- fitted(airline_final)
+predprobs[1:10,]
+```
+
+Interpreting the results:
+1a.Using the coefficients of Ease.of.Online.booking in final model(cuz the LaneAir mentioned this is the least difficult to increase satisfaction), for a customer who has 1(not completely satisfied), the odds of feeling neutral for LaneAir service versus feeling dissatisfied for LaneAir service are 56.97 times higher than other customers who don't feel 1(not completely satisfied)
+1b.For a customer who has 1(not completely satisfied), the odds of feeling satisfied for LaneAir service versus feeling dissatisfied for LaneAir service are 3.07 times higher than other customers who don't feel 1(not completely satisfied)
+2a.Using the coefficients of Ease.of.Online.booking in final model(cuz the LaneAir mentioned this is the least difficult to increase satisfaction), for a customer who has 2(not satisfied), the odds of feeling neutral for LaneAir service versus feeling dissatisfied for LaneAir service are 63.17 times higher than other customers who don't feel 2
+2b.For a customer who has 2(not satisfied), the odds of feeling satisfied for LaneAir service versus feeling dissatisfied for LaneAir service are 3.42 times higher than other customers who don't feel 2
+3a.Using the coefficients of Ease.of.Online.booking in final model(cuz the LaneAir mentioned this is the least difficult to increase satisfaction), for a customer who has 3, the odds of feeling neutral for LaneAir service versus feeling dissatisfied for LaneAir service are 53.7 times higher than other customers who don't feel 3
+3b.For a customer who has 3, the odds of feeling satisfied for LaneAir service versus feeling dissatisfied for LaneAir service are 3.42 times higher than other customers who don't feel 3
+4a.Using the coefficients of Ease.of.Online.booking in final model(cuz the LaneAir mentioned this is the least difficult to increase satisfaction), for a customer who has 4, the odds of feeling neutral for LaneAir service versus feeling dissatisfied for LaneAir service are 41.12 times higher than other customers who don't feel 4
+4b.For a customer who has 4, the odds of feeling satisfied for LaneAir service versus feeling dissatisfied for LaneAir service are 10.34 times higher than other customers who don't feel 4
+5a.Using the coefficients of Ease.of.Online.booking in final model(cuz the LaneAir mentioned this is the least difficult to increase satisfaction), for a customer who has 5, the odds of feeling neutral for LaneAir service versus feeling dissatisfied for LaneAir service are 48.24 times higher than other customers who don't feel 5
+5b.For a customer who has 5, the odds of feeling satisfied for LaneAir service versus feeling dissatisfied for LaneAir service are 3.7 times higher than other customers who don't feel 5
+
+
+```{r, echo=FALSE, message=FALSE, }
+########Accuracy
+pred_classes <- predict(airline_final)
+conf_mat <- confusionMatrix(as.factor(pred_classes), as.factor(airline$Satisfaction))
+conf_mat$table
+round(conf_mat$overall["Accuracy"],2)
+```
+
+```{r, echo=FALSE, message=FALSE, }
+####### ROC
+# par(mfcol = c(2,2))
+# roc((airline$Satisfaction == "dissatisfied"), predprobs[,1], plot=T,print.thres="best", legacy.axes=T,print.auc=T,
+    # col = "red3",percent=T,main="dissatisfied")
+# roc((airline$Satisfaction == "neutral"), predprobs[,2], plot=T,print.thres="best", legacy.axes=T,print.auc=T,
+    # col = "gray3",percent=T,main="neutral")
+# roc((airline$Satisfaction == "satisfied"), predprobs[,1], plot=T,print.thres="best", legacy.axes=T,print.auc=T,
+    # col = "blue3",percent=T,main="Satisfied")
+```
+The accuracy of the model is 0.71 the total fitting is good but needs improvement.The area under the satisfaction = "dissatisfied" is 81.51%, the area under the satisfaction = "neutral" is 82.54%,the area under the satisfaction = "satisfaction" is 96.7%.
+
+4. conclusion:
+After using the ordinal model, the accuracy becomes lower as 0.66, but multinomial model has 0.71, so the validity of the analysis is not good. I will finally choose multinomial one. 
+
+```{r, echo=FALSE, message=FALSE, }
+#### ordinal regression
+mod <- polr(Satisfaction ~ Gender + Age+ Type.of.Travel+Class+Customer.Type + Flight.Distance + Inflight.wifi.service+Ease.of.Online.booking + Inflight.service + Online.boarding+
+Inflight.entertainment+Food.and.drink+Seat.comfort+ On.board.service+Leg.room.service+
+Departure.Arrival.time.convenient+Baggage.handling+Gate.location+Cleanliness
++Checkin.service+Departure.Delay.in.Minutes+Arrival.Delay.in.Minutes, data = airline, Hess = TRUE) 
+#summary(mod)
+p <- pnorm(-abs(summary(mod)$coef[,"t value"])) *2
+ctable <- cbind(summary(mod)$coef,p)
+# ctable
+
+```
+
+```{r, echo=FALSE, message=FALSE, }
+#### predictions
+head(mod$fitted.values)
+confusionMatrix(predict(mod), airline$Satisfaction)
+```
+
+```{r, echo=FALSE, message=FALSE, }
+# newdat <- data.frame(Gender = c(0,1,0,1), Customer.Type = c(0,1,0,1))
+# newdat
+# predict(mod,newdat,type = "probs")
+# predict(airline_final, newdat, type = "probs")
+```
+
+
+```{r, echo=FALSE, message=FALSE, }
+#confusionMatrix(predict(airline_final), airline$Satisfaction)
+```
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
+
+
+
+
+
+
